@@ -59,11 +59,24 @@ class LandsatArchive(object):
 class LandsatMetadata(object):
     def __init__(self, metadata_path):
         self.__path = Path(metadata_path).resolve()
+        self.__groups = None
 
         if not self.__path.is_file():
             raise ValueError('{} is not a valid file'.format(str(self.__path)))
 
         self._init_attributes()
+
+    @property
+    def groups(self):
+        if self.__groups is None:
+            self.__groups = self._get_groups()
+
+        return self.__groups
+
+    def _get_groups(self):
+        return {key: value
+                for key, value in self.__dict__.items()
+                if value is not self.__path}
 
     def _init_attributes(self):
         metadata = self.__class__.read_metadata(self.__path)
@@ -71,12 +84,14 @@ class LandsatMetadata(object):
         for item in metadata:
             self.__setattr__(item.GROUP, item)
 
-    def _get_metadata_attributes(self):
-        return {key: value
-                for key, value in self.__dict__.items() if value is not self.__path}
+    def get(self, group, value, default=None):
+        try:
+            return self.__getattribute__(group.upper()).__getattribute__(value.upper())
+        except AttributeError:
+            return default
 
     def __str__(self):
-        return self.__repr__() + '\nMetadata attr: {}'.format(self._get_metadata_attributes())
+        return self.__repr__() + '\nMetadata attr: {}'.format(self.groups)
 
     def __repr__(self):
         return '{}({})'.format(self.__class__.__name__, self.__path)
