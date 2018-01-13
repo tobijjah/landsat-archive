@@ -8,7 +8,7 @@ from collections import namedtuple
 
 class LandsatArchive(object):
     def __init__(self, path, name='Landsat Archive', ex_path=None):
-        self.__path = Path(path).resolve()
+        self.__path = Path(path)
         self.__description = None
         self.__metadata = None
         self.__bands = None
@@ -53,12 +53,12 @@ class LandsatArchive(object):
         with opener.open(self.path, mode) as src:
             src.extractall(extract_path)
 
-        return Path(extract_path).resolve()
+        return Path(extract_path)
 
 
 class LandsatMetadata(object):
     def __init__(self, metadata_path):
-        self.__path = Path(metadata_path).resolve()
+        self.__path = Path(metadata_path)
         self.__groups = None
 
         if not self.__path.is_file():
@@ -124,7 +124,6 @@ class LandsatMetadata(object):
                 groups.append(current)
 
             elif bool(end_group.match(line)):
-                # groups[-1].append(line)  # appends group end tag (not needed)
                 yield groups.pop()
 
             elif bool(eof.match(line)):
