@@ -1,4 +1,5 @@
 from unittest import TestCase
+from src.landsat import LandsatMetadata
 
 
 class TestLandsatMetadata(TestCase):
@@ -21,4 +22,10 @@ class TestLandsatMetadata(TestCase):
         self.fail()
 
     def test_cast_to_best(self):
-        self.fail()
+        int_typ = LandsatMetadata.cast_to_best('1')
+        flt_typ = LandsatMetadata.cast_to_best('1.0')
+        str_typ = LandsatMetadata.cast_to_best('aaa')
+
+        self.assertTrue(isinstance(int_typ, int))
+        self.assertTrue(isinstance(flt_typ, float))
+        self.assertTrue(isinstance(str_typ, str))
