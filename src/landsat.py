@@ -7,6 +7,20 @@ from collections import namedtuple
 
 
 class LandsatArchive(object):
+    L8 = [(1, 'costal'), (2, 'blue'), (3, 'green'), (4, 'red'),
+          (5, 'nir'), (6, 'swir1'), (7, 'swir2'), (8, 'panchromatic'),
+          (9, 'cirrus'), (10, 'tirs1'), (11, 'tirs2'), ('BAND_QUALITY', 'bq'), ]
+    LANDSAT_BANDS = {'LANDSAT_1_MSS': '',
+                     'LANDSAT_2_MSS': '',
+                     'LANDSAT_3_MSS': '',
+                     'LANDSAT_4_MSS': '',
+                     'LANDSAT_5_MSS': '',
+                     'LANDSAT_4_TM': '',
+                     'LANDSAT_5_TM': '',
+                     'LANDSAT_7_ETM': '',
+                     'LANDSAT_8_OLI_TIRS': dict.fromkeys(L8),
+                     'GENERIC': {}, }
+
     def __init__(self, path, name='Landsat Archive', ex_path=None):
         self.__path = Path(path)
         self.__description = None
@@ -33,10 +47,34 @@ class LandsatArchive(object):
     def metadata(self):
         return self.__metadata
 
-    def __repr__(self):
-        return '{}({}, {})'.format(self.__class__.__name__, self.__path, self.name)
+    @property
+    def description(self):
+        if self.__description is None:
+            self._set_description()
+
+        return self.__description
+
+    def _set_description(self):
+        if self.metadata is None:
+            archive = 'GENERIC LANDSAT ARCHIVE'
+
+        else:
+            attrs = [('product_metadata', 'spacecraft_id'), ('product_metadata', 'sensor_id'),
+                     ('product_metadata', 'date_aquired'), ('image_attributes', 'cloud_cover'),
+                     ('image_attributes', 'image_quality'), ]
+
+            values = [self.metadata.get(group, value)
+                      for group, value in attrs]
+
+            archive = '{0.0}_{0.1}_{0.2}_{0.3}_{0.3}'.format(values)
+
+        # TODO append object info like number of bands etc.
+
+        self.__description = archive
 
     def _init_archive(self):
+        # init from metadata file
+        # if no metadata file init from folder content and push to generic
         pass
 
     def _decompress(self, extract_path):
@@ -55,6 +93,9 @@ class LandsatArchive(object):
 
         return Path(extract_path)
 
+    def __repr__(self):
+        return '{}({}, {})'.format(self.__class__.__name__, self.__path, self.name)
+
 
 class LandsatMetadata(object):
     def __init__(self, metadata_path):
@@ -69,11 +110,11 @@ class LandsatMetadata(object):
     @property
     def groups(self):
         if self.__groups is None:
-            self.__groups = self._get_groups()
+            self.__groups = self._set_groups()
 
         return self.__groups
 
-    def _get_groups(self):
+    def _set_groups(self):
         return {key: value
                 for key, value in self.__dict__.items()
                 if value is not self.__path}
