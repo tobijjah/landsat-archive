@@ -3,139 +3,126 @@ import os
 import zipfile
 import tarfile
 from pathlib import Path
-from collections import namedtuple
+from collections import namedtuple, OrderedDict
 
 
 class LandsatArchive(object):
-    L8 = [(1, 'costal'), (2, 'blue'), (3, 'green'), (4, 'red'),
-          (5, 'nir'), (6, 'swir1'), (7, 'swir2'), (8, 'panchromatic'),
-          (9, 'cirrus'), (10, 'tirs1'), (11, 'tirs2'), ('BAND_QUALITY', 'bq'), ]
-    LANDSAT_BANDS = {'LANDSAT_1_MSS': '',
-                     'LANDSAT_2_MSS': '',
-                     'LANDSAT_3_MSS': '',
-                     'LANDSAT_4_MSS': '',
-                     'LANDSAT_5_MSS': '',
-                     'LANDSAT_4_TM': '',
-                     'LANDSAT_5_TM': '',
-                     'LANDSAT_7_ETM': '',
-                     'LANDSAT_8_OLI_TIRS': dict.fromkeys(L8),
-                     'GENERIC': {}, }
+    def __init__(self, path=None, extract_path=None, alias='DEFAULT'):
+        self.alias = alias
+        self.extract = extract_path
 
-    def __init__(self, path, name='Landsat Archive', ex_path=None):
-        self.__path = Path(path)
-        self.__description = None
-        self.__metadata = None
-        self.__bands = None
-        self.name = name
+        self._is_archive = False
+        self._path = None
+        self.path = path
 
-        if self.__path.is_file() and self.__path.suffix in ['.gz', '.zip', 'bz2']:
-            ex = str(self.__path.parent / self.__path.stem.split('.')[0]) if ex_path is None else ex_path
-            self.__path = self._decompress(ex)
-            self._init_archive()
-
-        elif self.__path.is_dir():
-            self._init_archive()
-
-        else:
-            raise ValueError('{} is not a valid Landsat archive'.format(str(self.__path)))
+        self._description = None
+        self._metadata = None
+        self._bands = None
 
     @property
     def path(self):
-        return str(self.__path)
+        return self._path
 
-    @property
-    def metadata(self):
-        return self.__metadata
+    @path.setter
+    def path(self, value):
+        path = Path(value)
+        self._is_archive = False
 
-    @property
-    def description(self):
-        if self.__description is None:
-            self._set_description()
+        if path.is_file() and path.suffix in ['.gz', '.zip', 'bz2']:
+            self._is_archive = True
 
-        return self.__description
+        elif path.is_file() and path.suffix in ['.txt']:
+            self._metadata = LandsatMetadata(path)
+            path = path.parent
 
-    def _set_description(self):
-        if self.metadata is None:
-            archive = 'GENERIC LANDSAT ARCHIVE'
+        elif path.is_dir():
+            meta_path = self._metadata_sniffer(path)
+            self._metadata = LandsatMetadata(meta_path)
 
         else:
-            attrs = [('product_metadata', 'spacecraft_id'), ('product_metadata', 'sensor_id'),
-                     ('product_metadata', 'date_aquired'), ('image_attributes', 'cloud_cover'),
-                     ('image_attributes', 'image_quality'), ]
+            raise ValueError('{} is not a valid Landsat archive'.format(str(path)))
 
-            values = [self.metadata.get(group, value)
-                      for group, value in attrs]
+        self._path = path
 
-            archive = '{0.0}_{0.1}_{0.2}_{0.3}_{0.3}'.format(values)
+    def load(self):
+            if self._is_archive:
+                self.path = self._decompress()
 
-        # TODO append object info like number of bands etc.
+    def _decompress(self):
+        ex = str(self.path.parent / self.path.stem.split('.')[0]) if self.extract is None else self.extract
 
-        self.__description = archive
-
-    def _init_archive(self):
-        # init from metadata file
-        # if no metadata file init from folder content and push to generic
-        pass
-
-    def _decompress(self, extract_path):
         if tarfile.is_tarfile(self.path):
             opener = tarfile.TarFile
-            mode = 'r:gz' if self.__path.suffix == '.gz' else 'r:bz2'
+            mode = 'r:gz' if self.path.suffix == '.gz' else 'r:bz2'
 
         elif zipfile.is_zipfile(self.path):
             opener, mode = zipfile.ZipFile, 'r'
 
         else:
-            raise ValueError('Unknown archive type "{}"'.format(self.__path.suffix))
+            raise ValueError('Unknown archive type "{}"'.format(self.path.suffix))
 
         with opener.open(self.path, mode) as src:
-            src.extractall(extract_path)
+            src.extractall(ex)
 
-        return Path(extract_path)
+        return Path(ex)
+
+    def _metadata_sniffer(self, path):
+        meta = None
+
+        for item in os.listdir(str(path)):
+            pass
+
+        return meta
 
     def __repr__(self):
-        return '{}({}, {})'.format(self.__class__.__name__, self.__path, self.name)
+        return '{}({}, {})'.format(self.__class__.__name__, self.path, self.alias)
 
 
 class LandsatMetadata(object):
     def __init__(self, metadata_path):
-        self.__path = Path(metadata_path)
-        self.__groups = None
+        self.path = Path(metadata_path)
 
-        if not self.__path.is_file():
-            raise ValueError('{} is not a valid file'.format(str(self.__path)))
+        if not self.path.is_file():
+            raise ValueError('{} is not a valid file'.format(str(self.path)))
 
-        self._init_attributes()
+    def _asdict(self):
+        return OrderedDict([(k, v._asdict())
+                            for k, v in self.__dict__.items()
+                            if v is not self.path])
 
-    @property
-    def groups(self):
-        if self.__groups is None:
-            self.__groups = self._set_groups()
-
-        return self.__groups
-
-    def _set_groups(self):
-        return {key: value
-                for key, value in self.__dict__.items()
-                if value is not self.__path}
-
-    def _init_attributes(self):
-        metadata = self.__class__.read_metadata(self.__path)
+    def parse(self):
+        metadata = self.__class__.read_metadata(self.path)
 
         for item in metadata:
             self.__setattr__(item.GROUP, item)
 
-    def get(self, group, value, default=None):
+    def get(self, group, value=None, default=None):
         try:
-            return self.__getattribute__(group.upper()).__getattribute__(value.upper())
+            attr = self.__getattribute__(group.upper())
+
+            if value is None:
+                return attr
+
+            else:
+                return attr.__getattribute__(value.upper())
+
         except AttributeError:
             return default
 
+    def iter_group(self, group):
+        attr = self.get(group)
+
+        if attr is None:
+            raise AttributeError('Unknown metadata group {}'.format(group))
+
+        for k, v in attr._asdict().items():
+            yield k, v
+
     def __str__(self):
-        return self.__repr__() + '\nMetadata attr: {}'.format(self.groups)
+        return self.__repr__() + '\nMetadata attr: {}'.format(self._asdict())
 
     def __repr__(self):
-        return '{}({})'.format(self.__class__.__name__, self.__path)
+        return '{}({})'.format(self.__class__.__name__, self.path)
 
     @staticmethod
     def read_metadata(path):
@@ -168,7 +155,8 @@ class LandsatMetadata(object):
                 yield groups.pop()
 
             elif bool(eof.match(line)):
-                yield groups
+                # handle unclosed groups
+                yield from groups
 
             else:
                 groups[-1].append(line)
@@ -183,7 +171,12 @@ class LandsatMetadata(object):
             values = []
 
             for item in group:
-                key, value = regex.match(item).groups()
+                # skip item if not properly formatted
+                try:
+                    key, value = regex.match(item).groups()
+                except AttributeError:
+                    continue
+
                 value = __class__.cast_to_best(value)
                 keys.append(key)
                 values.append(value)
@@ -192,6 +185,8 @@ class LandsatMetadata(object):
                 Metadata = namedtuple('Metadata', keys)
                 obj = Metadata(*values)
                 metadata.append(obj)
+
+        assert len(metadata) > 0
 
         return metadata
 
