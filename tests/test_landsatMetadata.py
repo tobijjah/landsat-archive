@@ -16,8 +16,20 @@ class TestLandsatMetadata(TestCase):
     def test_scanner(self):
         self.fail()
 
-    def test_lexer(self):
-        self.fail()
+    def test_lexer_with_valid_metadata(self):
+        # mock of valid metadata content
+        mock_gen = ['GROUP = T1', 'ATTR1 = 1', 'END_GROUP = T1', 'GROUP = T2', 'ATTR1 = 1', 'END_GROUP = T2']
+        result = list(LandsatMetadata.lexer(mock_gen))
+
+        self.assertTrue(len(result) == 2)
+
+    def test_lexer_with_malicious_metadata(self):
+        # mock of valid metadata content
+        mock_gen = ['GROUP = T1', 'ATTR1 = 1', 'END_GROUP = T1', 'GROUP = T2', 'ATTR1 = 1',
+                    'GROUP = T3', 'ATTR1 = 1', 'END_GROUP = T3']
+        result = list(LandsatMetadata.lexer(mock_gen))
+
+        self.assertTrue(len(result) == 3)
 
     def test_parser_returns_expected_on_valid_metadata(self):
         # mock of a valid metadata group
