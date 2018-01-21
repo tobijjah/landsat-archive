@@ -1,4 +1,5 @@
 from unittest import TestCase
+from collections import namedtuple
 from src.landsat import LandsatMetadata
 
 
@@ -18,8 +19,22 @@ class TestLandsatMetadata(TestCase):
     def test_lexer(self):
         self.fail()
 
-    def test_parser(self):
-        self.fail()
+    def test_parser_returns_expected_on_valid_metadata(self):
+        # mock of a valid metadata group
+        mock_gen = [['GROUP = TEST1', 'ATTR1 = 1', 'ATTR2 = 2.0', 'ATTR3 = "A TEST"']]
+        fields = ('GROUP', 'ATTR1', 'ATTR2', 'ATTR3')
+
+        result = LandsatMetadata.parser(mock_gen)
+        for item in result:
+            self.assertTrue(item, tuple)
+            self.assertEqual(item._fields, fields)
+
+    def test_parser_fails_on_invalid_metadata(self):
+        # mock of a invalid metadata group
+        mock_gen = [['GROUP = TEST1'], ['FOO', 'BAR'], []]
+
+        with self.assertRaises(AssertionError):
+            LandsatMetadata.parser(mock_gen)
 
     def test_cast_to_best(self):
         int_typ = LandsatMetadata.cast_to_best('1')
