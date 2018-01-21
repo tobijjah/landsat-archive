@@ -113,10 +113,11 @@ class LandsatMetadata(object):
         attr = self.get(group)
 
         if attr is None:
-            raise AttributeError('Unknown metadata group {}'.format(group))
+            return
 
         yield from attr._asdict().items()
 
+    # TODO return meaningful string currently it is a mess
     def __str__(self):
         return self.__repr__() + '\nMetadata attr: {}'.format(self._asdict())
 
@@ -153,7 +154,10 @@ class LandsatMetadata(object):
                 yield groups.pop()
 
             else:
-                groups[-1].append(line)
+                if groups:
+                    groups[-1].append(line)
+                else:
+                    groups.append([line])
 
         yield from groups
 
@@ -177,11 +181,13 @@ class LandsatMetadata(object):
                 keys.append(key)
                 values.append(value)
 
+            # TODO accept without GROUP key and create a generic group key
             if len(keys) == len(values) and len(keys) > 1 and 'GROUP' in keys:
                 Metadata = namedtuple('Metadata', keys)
                 obj = Metadata(*values)
                 metadata.append(obj)
 
+        # TODO convert into a meaningful exception
         assert len(metadata) > 0
 
         return metadata
@@ -197,7 +203,3 @@ class LandsatMetadata(object):
 
             except ValueError:
                 return '{}'.format(value.strip('"'))
-
-
-if __name__ == '__main__':
-    pass
