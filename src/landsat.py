@@ -12,12 +12,9 @@ class LandsatArchive(object):
         self.extract = extract_path
 
         self._is_archive = False
-        self._path = None
-        self.path = path
+        self._description, self._metadata, self._bands, self._path = None, None, None, None
 
-        self._description = None
-        self._metadata = None
-        self._bands = None
+        self.path = path
 
     @property
     def path(self):
