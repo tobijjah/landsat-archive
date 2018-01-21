@@ -1,20 +1,41 @@
+import os
+from pathlib import Path
 from unittest import TestCase
-from collections import namedtuple
 from src.landsat import LandsatMetadata
 
 
+RES = Path(os.getcwd()) / 'res'
+
+
 class TestLandsatMetadata(TestCase):
-    def test__init_attributes(self):
-        self.fail()
+    # TODO test _asdict, parse, scanner, init
 
-    def test__get_metadata_attributes(self):
-        self.fail()
+    def test_get_with_valid_attributes(self):
+        meta = LandsatMetadata(RES / 'ls8_mtl.txt')
+        meta.parse()
 
-    def test_read_metadata(self):
-        self.fail()
+        self.assertTrue(isinstance(meta.get('PRODUCT_METADATA'), tuple))
+        self.assertTrue(meta.get('pROduct_metaDATA', 'spacecraft_id') == 'LANDSAT_8')
 
-    def test_scanner(self):
-        self.fail()
+    def test_get_with_invalid_attributes(self):
+        meta = LandsatMetadata(RES / 'ls8_mtl.txt')
+        meta.parse()
+
+        self.assertTrue(meta.get('FOO', 'BAR') is None)
+
+    def test_iter_group_with_valid_attribute(self):
+        meta = LandsatMetadata(RES / 'ls8_mtl.txt')
+        meta.parse()
+        result = list(meta.iter_group('PRODUCT_METADATA'))
+
+        self.assertTrue(len(result) == 54)
+
+    def test_iter_group_with_invalid_attribute(self):
+        meta = LandsatMetadata(RES / 'ls8_mtl.txt')
+        meta.parse()
+        result = list(meta.iter_group('foo'))
+
+        self.assertTrue(result == [])
 
     def test_lexer_with_valid_metadata(self):
         # mock of valid metadata content
