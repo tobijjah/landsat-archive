@@ -115,8 +115,7 @@ class LandsatMetadata(object):
         if attr is None:
             raise AttributeError('Unknown metadata group {}'.format(group))
 
-        for k, v in attr._asdict().items():
-            yield k, v
+        yield from attr._asdict().items()
 
     def __str__(self):
         return self.__repr__() + '\nMetadata attr: {}'.format(self._asdict())
@@ -143,7 +142,6 @@ class LandsatMetadata(object):
     def lexer(scanner):
         start_group = re.compile(r'GROUP\s=\s.+')
         end_group = re.compile(r'END_GROUP\s=\s.+')
-        eof = re.compile(r'END')
 
         groups = []
         for line in scanner:
@@ -154,12 +152,10 @@ class LandsatMetadata(object):
             elif bool(end_group.match(line)):
                 yield groups.pop()
 
-            elif bool(eof.match(line)):
-                # handle unclosed groups
-                yield from groups
-
             else:
                 groups[-1].append(line)
+
+        yield from groups
 
     @staticmethod
     def parser(lexer):
@@ -181,7 +177,7 @@ class LandsatMetadata(object):
                 keys.append(key)
                 values.append(value)
 
-            if len(keys) == len(values) and len(keys) > 1:
+            if len(keys) == len(values) and len(keys) > 1 and 'GROUP' in keys:
                 Metadata = namedtuple('Metadata', keys)
                 obj = Metadata(*values)
                 metadata.append(obj)
