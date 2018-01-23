@@ -9,6 +9,15 @@ RES = Path(os.getcwd()) / 'res'
 
 class TestLandsatMetadata(TestCase):
     # TODO test _asdict, parse, scanner, init
+    def test_delete_attributes(self):
+        meta = LandsatMetadata(RES / 'ls8_mtl.txt')
+        meta.parse()
+
+        self.assertTrue(len(meta._asdict()) > 0)
+
+        meta._delete_attributes()
+
+        self.assertTrue(len(meta._asdict()) == 0)
 
     def test_get_with_valid_attributes(self):
         meta = LandsatMetadata(RES / 'ls8_mtl.txt')
@@ -38,14 +47,14 @@ class TestLandsatMetadata(TestCase):
         self.assertTrue(result == [])
 
     def test_lexer_with_valid_metadata(self):
-        # mock of valid metadata content
+        # stub of valid metadata content
         mock_gen = ['GROUP = T1', 'ATTR1 = 1', 'END_GROUP = T1', 'GROUP = T2', 'ATTR1 = 1', 'END_GROUP = T2']
         result = list(LandsatMetadata.lexer(mock_gen))
 
         self.assertTrue(len(result) == 2)
 
     def test_lexer_with_malicious_metadata(self):
-        # mock of valid metadata content
+        # stub of valid metadata content
         mock_gen = ['GROUP = T1', 'ATTR1 = 1', 'END_GROUP = T1', 'GROUP = T2', 'ATTR1 = 1',
                     'GROUP = T3', 'ATTR1 = 1', 'END_GROUP = T3']
         result = list(LandsatMetadata.lexer(mock_gen))
@@ -53,7 +62,7 @@ class TestLandsatMetadata(TestCase):
         self.assertTrue(len(result) == 3)
 
     def test_parser_returns_expected_on_valid_metadata(self):
-        # mock of a valid metadata group
+        # stub of a valid metadata group
         mock_gen = [['GROUP = TEST1', 'ATTR1 = 1', 'ATTR2 = 2.0', 'ATTR3 = "A TEST"']]
         fields = ('GROUP', 'ATTR1', 'ATTR2', 'ATTR3')
 
@@ -63,7 +72,7 @@ class TestLandsatMetadata(TestCase):
             self.assertEqual(item._fields, fields)
 
     def test_parser_fails_on_invalid_metadata(self):
-        # mock of a invalid metadata group
+        # stub of a invalid metadata group
         mock_gen = [['GROUP = TEST1'], ['FOO', 'BAR'], []]
 
         with self.assertRaises(AssertionError):
