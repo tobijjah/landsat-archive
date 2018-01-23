@@ -1,8 +1,15 @@
 import unittest
+from pathlib import Path
+from zipfile import ZipFile
+from tarfile import TarFile
+from src.landsat import LandsatArchive
 
 
-@unittest.skip
 class TestLandsatArchive(unittest.TestCase):
-    def test_path(self):
-        self.fail()
+    # TODO mock required
+    def test_factory(self):
+        _tar = LandsatArchive.factory(Path('foo.tar.gz'))
+        _zip = LandsatArchive.factory(Path('foo.zip'))
 
+        self.assertTrue(isinstance(_tar, TarFile))
+        self.assertTrue(isinstance(_zip, ZipFile))

@@ -1,18 +1,24 @@
 import re
 import os
-import zipfile
-import tarfile
 from pathlib import Path
+from zipfile import ZipFile
+from tarfile import TarFile
 from collections import namedtuple, OrderedDict
 
 
+class TarFileWrapper(TarFile):
+    def namelist(self):
+        return self.getnames()
+
+
 class LandsatArchive(object):
-    def __init__(self, path=None, extract_path=None, alias='DEFAULT'):
+    def __init__(self, path, extract_path=None, alias='DEFAULT'):
         self.alias = alias
         self.extract = extract_path
 
         self._is_archive = False
-        self._description, self._metadata, self._bands, self._path = None, None, None, None
+        self._metadata = LandsatMetadata()
+        self._description, self._bands, self._path = None, None, None
 
         self.path = path
 
@@ -25,16 +31,16 @@ class LandsatArchive(object):
         path = Path(value)
         self._is_archive = False
 
-        if path.is_file() and path.suffix in ['.gz', '.zip', 'bz2']:
+        if path.is_file() and path.suffix in ('.gz', '.zip', 'bz2',):
+            # TODO sniff in archive for metadata
             self._is_archive = True
 
-        elif path.is_file() and path.suffix in ['.txt']:
-            self._metadata = LandsatMetadata(path)
+        elif path.is_file() and path.suffix == '.txt':
+            self._metadata.path = path
             path = path.parent
 
         elif path.is_dir():
-            meta_path = self._metadata_sniffer(path)
-            self._metadata = LandsatMetadata(meta_path)
+            self._metadata.path = path / self._metadata_sniffer(os.listdir(str(path)))
 
         else:
             raise ValueError('{} is not a valid Landsat archive'.format(str(path)))
@@ -46,46 +52,59 @@ class LandsatArchive(object):
                 self.path = self._decompress()
 
     def _decompress(self):
-        ex = str(self.path.parent / self.path.stem.split('.')[0]) if self.extract is None else self.extract
-
-        if tarfile.is_tarfile(self.path):
-            opener = tarfile.TarFile
-            mode = 'r:gz' if self.path.suffix == '.gz' else 'r:bz2'
-
-        elif zipfile.is_zipfile(self.path):
-            opener, mode = zipfile.ZipFile, 'r'
-
-        else:
-            raise ValueError('Unknown archive type "{}"'.format(self.path.suffix))
-
-        with opener.open(self.path, mode) as src:
-            src.extractall(ex)
-
-        return Path(ex)
-
-    def _metadata_sniffer(self, path):
-        meta = None
-
-        for item in os.listdir(str(path)):
             pass
 
-        return meta
+    def _metadata_sniffer(self, names):
+        meta = None
+
+        for name in names:
+            pass
+
+        # TODO meaningful error
+        if meta is None:
+            raise ValueError
+
+        return 'name'
 
     def __repr__(self):
         return '{}({}, {})'.format(self.__class__.__name__, self.path, self.alias)
 
+    @staticmethod
+    def factory(archive):
+        # TODO use mock for testing
+        if archive.suffix == '.zip':
+            return ZipFile(str(archive), mode='r')
+
+        else:
+            return TarFileWrapper.open(str(archive), mode='r')
+
 
 class LandsatMetadata(object):
-    def __init__(self, metadata_path):
-        self.path = Path(metadata_path)
+    def __init__(self, metadata_path=None):
+        if metadata_path is None:
+            self._path = metadata_path
 
-        if not self.path.is_file():
-            raise ValueError('{} is not a valid file'.format(str(self.path)))
+        else:
+            self.path = metadata_path
+
+    @property
+    def path(self):
+        return str(self._path)
+
+    @path.setter
+    def path(self, value):
+        # TODO check is file and is .txt
+        self._delete_attributes()
+        self._path = Path(value)
 
     def _asdict(self):
         return OrderedDict([(k, v._asdict())
                             for k, v in self.__dict__.items()
-                            if v is not self.path])
+                            if v is not self._path])
+
+    def _delete_attributes(self):
+        for attr in self._asdict():
+            delattr(self, attr)
 
     def parse(self):
         metadata = self.__class__.read_metadata(self.path)
@@ -123,7 +142,7 @@ class LandsatMetadata(object):
 
     @staticmethod
     def read_metadata(path):
-        with open(str(path), 'r') as src:
+        with open(path, 'r') as src:
             content = src.readlines()
             scan = __class__.scanner(content)
             lex = __class__.lexer(scan)
