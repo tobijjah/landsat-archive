@@ -8,41 +8,32 @@ RES = Path(os.getcwd()) / 'res'
 
 
 class TestLandsatMetadata(TestCase):
-    # TODO test _asdict, parse, scanner, init
+    # TODO test _asdict, parse, scanner, init, read
+    def setUp(self):
+        self.meta = LandsatMetadata(RES / 'ls8_mtl.txt')
+        self.meta.parse()
+
     def test_delete_attributes(self):
-        meta = LandsatMetadata(RES / 'ls8_mtl.txt')
-        meta.parse()
+        self.assertTrue(len(self.meta._asdict()) > 0)
 
-        self.assertTrue(len(meta._asdict()) > 0)
+        self.meta._delete_attributes()
 
-        meta._delete_attributes()
-
-        self.assertTrue(len(meta._asdict()) == 0)
+        self.assertTrue(len(self.meta._asdict()) == 0)
 
     def test_get_with_valid_attributes(self):
-        meta = LandsatMetadata(RES / 'ls8_mtl.txt')
-        meta.parse()
-
-        self.assertTrue(isinstance(meta.get('PRODUCT_METADATA'), tuple))
-        self.assertTrue(meta.get('pROduct_metaDATA', 'spacecraft_id') == 'LANDSAT_8')
+        self.assertTrue(isinstance(self.meta.get('PRODUCT_METADATA'), tuple))
+        self.assertTrue(self.meta.get('pROduct_metaDATA', 'spacecraft_id') == 'LANDSAT_8')
 
     def test_get_with_invalid_attributes(self):
-        meta = LandsatMetadata(RES / 'ls8_mtl.txt')
-        meta.parse()
-
-        self.assertTrue(meta.get('FOO', 'BAR') is None)
+        self.assertTrue(self.meta.get('FOO', 'BAR') is None)
 
     def test_iter_group_with_valid_attribute(self):
-        meta = LandsatMetadata(RES / 'ls8_mtl.txt')
-        meta.parse()
-        result = list(meta.iter_group('PRODUCT_METADATA'))
+        result = list(self.meta.iter_group('PRODUCT_METADATA'))
 
         self.assertTrue(len(result) == 54)
 
     def test_iter_group_with_invalid_attribute(self):
-        meta = LandsatMetadata(RES / 'ls8_mtl.txt')
-        meta.parse()
-        result = list(meta.iter_group('foo'))
+        result = list(self.meta.iter_group('foo'))
 
         self.assertTrue(result == [])
 
