@@ -13,6 +13,7 @@ class TarFileWrapper(TarFile):
 
 class LandsatArchive(object):
     def __init__(self, path, extract_path=None, alias='DEFAULT'):
+        # TODO add metadata template regex parameter
         self.alias = alias
         self.extract = extract_path
 
@@ -31,47 +32,49 @@ class LandsatArchive(object):
         path = Path(value)
         self._is_archive = False
 
-        if path.is_file() and path.suffix in ('.gz', '.zip', 'bz2',):
-            # TODO sniff in archive for metadata
-            self._is_archive = True
+        if path.is_file():
+            if path.suffix == '.txt':
+                self._metadata.path = path
+                self._path = path.parent
 
-        elif path.is_file() and path.suffix == '.txt':
-            self._metadata.path = path
-            path = path.parent
+            else:
+                # TODO sniff in archive for metadata
+                self._is_archive = True
 
         elif path.is_dir():
-            self._metadata.path = path / self._metadata_sniffer(os.listdir(str(path)))
+            self._metadata.path = path / self.__class__.metadata_sniffer(os.listdir(str(path)))
+            self._path = path
 
         else:
-            raise ValueError('{} is not a valid Landsat archive'.format(str(path)))
-
-        self._path = path
+            raise ValueError('{} does not exist'.format(str(path)))
 
     def load(self):
-            if self._is_archive:
-                self.path = self._decompress()
+            pass
 
     def _decompress(self):
             pass
-
-    def _metadata_sniffer(self, names):
-        meta = None
-
-        for name in names:
-            pass
-
-        # TODO meaningful error
-        if meta is None:
-            raise ValueError
-
-        return 'name'
 
     def __repr__(self):
         return '{}({}, {})'.format(self.__class__.__name__, self.path, self.alias)
 
     @staticmethod
+    def metadata_sniffer(names, template=None):
+        if template is not None:
+            regex = re.compile(template)
+
+        else:
+            regex = re.compile(r'.*_?MTL.txt', re.I)
+
+        for name in names:
+            name = os.path.basename(name)
+
+            if bool(regex.match(name)):
+                return name
+
+        raise FileNotFoundError('Missing Landsat MTL')
+
+    @staticmethod
     def factory(archive):
-        # TODO use mock for testing
         if archive.suffix == '.zip':
             return ZipFile(str(archive), mode='r')
 
@@ -80,6 +83,8 @@ class LandsatArchive(object):
 
 
 class LandsatMetadata(object):
+    _OPENER = open
+
     def __init__(self, metadata_path=None):
         if metadata_path is None:
             self._path = metadata_path
@@ -93,7 +98,9 @@ class LandsatMetadata(object):
 
     @path.setter
     def path(self, value):
-        # TODO check is file and is .txt
+        if Path(value).suffix != '.txt':
+            raise ValueError('{} should be a "*.txt" file'.format(value))
+
         self._delete_attributes()
         self._path = Path(value)
 
@@ -107,7 +114,7 @@ class LandsatMetadata(object):
             delattr(self, attr)
 
     def parse(self):
-        metadata = self.__class__.read_metadata(self.path)
+        metadata = self.__class__.read(self.path)
 
         for item in metadata:
             self.__setattr__(item.GROUP, item)
@@ -141,8 +148,8 @@ class LandsatMetadata(object):
         return '{}({})'.format(self.__class__.__name__, self.path)
 
     @staticmethod
-    def read_metadata(path):
-        with open(path, 'r') as src:
+    def read(path):
+        with __class__._OPENER(path, 'r') as src:
             content = src.readlines()
             scan = __class__.scanner(content)
             lex = __class__.lexer(scan)
