@@ -1,9 +1,17 @@
 import re
 import os
 from pathlib import Path
-from zipfile import ZipFile
-from tarfile import TarFile
+from zipfile import ZipFile, is_zipfile
+from tarfile import TarFile, is_tarfile
 from collections import namedtuple, OrderedDict
+from contextlib import contextmanager
+
+
+BAND_MAP = {
+    'LANDSAT_4_TM': ''.split(),
+    'LANDSAT_7_ETM': ''.split(),
+    'LANDSAT_8_OLI_TIRS': ''.split(),
+}
 
 
 class LandsatError(Exception):
@@ -16,6 +24,10 @@ class UnsupportedSourceError(LandsatError):
 
 class MetadataFileError(LandsatError):
     """Exception for Landsat metadata files"""
+
+
+class MetadataFileParsingError(LandsatError):
+    """Exception for errors occurring during metadata file parsing"""
 
 
 class TarFileWrapper(TarFile):
@@ -31,7 +43,7 @@ class LandsatArchive(object):
         self.metadata = metadata_obj
 
     @classmethod
-    def open(cls, source, extract_to=None, alias=None, meta_template=r'.*_?MTL.txt', band_mapping=None):
+    def open(cls, source, extract_to=None, alias=None, meta_template=r'.*_?MTL.txt', band_mapping=BAND_MAP):
         """
 
         :param source:
@@ -47,9 +59,9 @@ class LandsatArchive(object):
             return cls.directory_open(src, alias, meta_template, band_mapping)
 
         elif src.suffix == 'txt':
-            return cls.metadata_open(src, alias, meta_template, band_mapping)
+            return cls.metadata_open(src, alias, band_mapping)
 
-        elif src.suffix in ('.zip', '.tar', '.gz', 'bz2'):
+        elif is_zipfile(str(src)) or is_tarfile(str(src)):
             return cls.archive_open(src, extract_to, alias, meta_template, band_mapping)
 
         else:
@@ -57,33 +69,37 @@ class LandsatArchive(object):
 
     @classmethod
     def directory_open(cls, directory, alias, meta_template, band_mapping):
-        pass
+        # TODO init band mapping
+        metadata_file = cls.metadata_sniffer(os.listdir(str(directory)), meta_template)
+        metadata_obj = LandsatMetadata(str(directory / metadata_file))
+        metadata_obj.parse()
+
+        return cls(directory, metadata_obj, alias, band_mapping)
 
     @classmethod
-    def metadata_open(cls, metadata, alias, meta_template, band_mapping):
-        pass
+    def metadata_open(cls, metadata, alias, band_mapping):
+        # TODO init band mapping
+        metadata_obj = LandsatMetadata(metadata)
+        metadata_obj.parse()
+
+        path = metadata.parent
+
+        return cls(path, metadata_obj, alias, band_mapping)
 
     @classmethod
     def archive_open(cls, archive, extract_to, alias, meta_template, band_mapping):
         pass
 
     def load(self):
-        for k, v in self._metadata.iter_group('PRODUCT_METADATA'):
-            pass
-
-    def _decompress(self):
+        for k, v in self.metadata.iter_group('PRODUCT_METADATA'):
             pass
 
     def __repr__(self):
-        return '{}({}, {})'.format(self.__class__.__name__, self.path, self.alias)
+        return '{}({}, {}, {}, {})'.format(__class__.__name__, self.src, self.metadata, self.alias, self.mapping)
 
     @staticmethod
-    def metadata_sniffer(names, template=None):
-        if template is not None:
-            regex = re.compile(template)
-
-        else:
-            regex = re.compile(r'.*_?MTL.txt', re.I)
+    def metadata_sniffer(names, template):
+        regex = re.compile(template)
 
         for name in names:
             name = os.path.basename(name)
@@ -91,19 +107,25 @@ class LandsatArchive(object):
             if bool(regex.match(name)):
                 return name
 
-        raise FileNotFoundError('Missing Landsat MTL')
+        raise MetadataFileError('Missing Landsat metadata file in %s' % names)
 
     @staticmethod
-    def factory(archive):
+    @contextmanager
+    def archive_opener(archive, mode='r'):
         try:
-            return TarFileWrapper.open(archive, mode='r')
+            if is_tarfile(archive):
+                opener = TarFileWrapper.open(archive, mode=mode)
+                yield opener
 
-        except:
-            try:
-                return ZipFile(archive, mode='r')
+            elif is_zipfile(archive):
+                opener = ZipFile(archive, mode=mode)
+                yield opener
 
-            except:
-                raise ValueError
+            else:
+                raise UnsupportedSourceError('Unsupported archive file %s' % archive)
+
+        finally:
+            opener.close()
 
 
 class LandsatMetadata(object):
@@ -115,7 +137,7 @@ class LandsatMetadata(object):
         if tmp.is_file() and tmp.suffix == '.txt':
             self.path = tmp
         else:
-            raise MetadataFileError('Unsupported metadata fiel %s' % path)
+            raise MetadataFileError('Unsupported metadata file %s' % path)
 
     def _asdict(self):
         return OrderedDict([(k, v._asdict())
