@@ -6,49 +6,69 @@ from tarfile import TarFile
 from collections import namedtuple, OrderedDict
 
 
+class LandsatError(Exception):
+    """Base exception"""
+
+
+class UnsupportedSourceError(LandsatError):
+    """Exception for unsupported sources"""
+
+
+class MetadataFileError(LandsatError):
+    """Exception for Landsat metadata files"""
+
+
 class TarFileWrapper(TarFile):
     def namelist(self):
         return self.getnames()
 
 
 class LandsatArchive(object):
-    def __init__(self, path, extract_path=None, alias='DEFAULT'):
-        # TODO add metadata template regex parameter
+    def __init__(self, source, metadata_obj, alias, band_mapping):
+        self.src = source
         self.alias = alias
-        self.extract = extract_path
+        self.mapping = band_mapping
+        self.metadata = metadata_obj
 
-        self._is_archive = False
-        self._metadata = LandsatMetadata()
-        self._description, self._bands, self._path = None, None, None
+    @classmethod
+    def open(cls, source, extract_to=None, alias=None, meta_template=r'.*_?MTL.txt', band_mapping=None):
+        """
 
-        self.path = path
+        :param source:
+        :param extract_to:
+        :param alias:
+        :param meta_template:
+        :param band_mapping:
+        :return:
+        """
+        src = Path(source)
 
-    @property
-    def path(self):
-        return self._path
+        if src.is_dir():
+            return cls.directory_open(src, alias, meta_template, band_mapping)
 
-    @path.setter
-    def path(self, value):
-        path = Path(value)
-        self._is_archive = False
+        elif src.suffix == 'txt':
+            return cls.metadata_open(src, alias, meta_template, band_mapping)
 
-        if path.is_file():
-            if path.suffix == '.txt':
-                self._metadata.path = path
-                self._path = path.parent
-
-            else:
-                # TODO sniff in archive for metadata
-                self._is_archive = True
-
-        elif path.is_dir():
-            self._metadata.path = path / self.__class__.metadata_sniffer(os.listdir(str(path)))
-            self._path = path
+        elif src.suffix in ('.zip', '.tar', '.gz', 'bz2'):
+            return cls.archive_open(src, extract_to, alias, meta_template, band_mapping)
 
         else:
-            raise ValueError('{} does not exist'.format(str(path)))
+            raise UnsupportedSourceError('%s is not supported' % source)
+
+    @classmethod
+    def directory_open(cls, directory, alias, meta_template, band_mapping):
+        pass
+
+    @classmethod
+    def metadata_open(cls, metadata, alias, meta_template, band_mapping):
+        pass
+
+    @classmethod
+    def archive_open(cls, archive, extract_to, alias, meta_template, band_mapping):
+        pass
 
     def load(self):
+        for k, v in self._metadata.iter_group('PRODUCT_METADATA'):
             pass
 
     def _decompress(self):
@@ -75,46 +95,39 @@ class LandsatArchive(object):
 
     @staticmethod
     def factory(archive):
-        if archive.suffix == '.zip':
-            return ZipFile(str(archive), mode='r')
+        try:
+            return TarFileWrapper.open(archive, mode='r')
 
-        else:
-            return TarFileWrapper.open(str(archive), mode='r')
+        except:
+            try:
+                return ZipFile(archive, mode='r')
+
+            except:
+                raise ValueError
 
 
 class LandsatMetadata(object):
     _OPENER = open
 
-    def __init__(self, metadata_path=None):
-        if metadata_path is None:
-            self._path = metadata_path
+    def __init__(self, path):
+        tmp = Path(path)
 
+        if tmp.is_file() and tmp.suffix == '.txt':
+            self.path = tmp
         else:
-            self.path = metadata_path
-
-    @property
-    def path(self):
-        return str(self._path)
-
-    @path.setter
-    def path(self, value):
-        if Path(value).suffix != '.txt':
-            raise ValueError('{} should be a "*.txt" file'.format(value))
-
-        self._delete_attributes()
-        self._path = Path(value)
+            raise MetadataFileError('Unsupported metadata fiel %s' % path)
 
     def _asdict(self):
         return OrderedDict([(k, v._asdict())
                             for k, v in self.__dict__.items()
-                            if v is not self._path])
+                            if v is not self.path])
 
     def _delete_attributes(self):
         for attr in self._asdict():
             delattr(self, attr)
 
     def parse(self):
-        metadata = self.__class__.read(self.path)
+        metadata = self.__class__.read(str(self.path))
 
         for item in metadata:
             self.__setattr__(item.GROUP, item)
