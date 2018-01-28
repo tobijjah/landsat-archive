@@ -1,16 +1,21 @@
-import os
-from pathlib import Path
 from unittest import TestCase
 from src.landsat import LandsatMetadata
-
-
-RES = Path(os.getcwd()) / 'res'
+from tests.stubs import L1, L4, L7, L8, OpenStub, FileMock
+from src.landsat import MetadataFileParsingError
 
 
 class TestLandsatMetadata(TestCase):
     # TODO test _asdict, parse, scanner, init, read
     def setUp(self):
-        self.meta = LandsatMetadata(RES / 'ls8_mtl.txt')
+        # prepare mock objects
+        file_mock = FileMock(L8)
+        open_stub = OpenStub(file_mock)
+        opener = open_stub.open
+
+        # inject open stub
+        LandsatMetadata._OPENER = opener
+
+        self.meta = LandsatMetadata('foo')
         self.meta.parse()
 
     def test_delete_attributes(self):
@@ -66,7 +71,7 @@ class TestLandsatMetadata(TestCase):
         # stub of a invalid metadata group
         mock_gen = [['GROUP = TEST1'], ['FOO', 'BAR'], []]
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(MetadataFileParsingError):
             LandsatMetadata.parser(mock_gen)
 
     def test_cast_to_best(self):
