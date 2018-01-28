@@ -31,6 +31,8 @@ class MetadataFileParsingError(LandsatError):
 
 
 class TarFileWrapper(TarFile):
+    """Delegate a namelist call to TarFile.getnames. Required for convenient duck typing
+    between ZipFile and TarFile"""
     def namelist(self):
         return self.getnames()
 
@@ -58,7 +60,7 @@ class LandsatArchive(object):
         if src.is_dir():
             return cls.directory_open(src, alias, meta_template, band_mapping)
 
-        elif src.suffix == 'txt' and src.is_file():
+        elif src.suffix == '.txt' and src.is_file():
             return cls.metadata_open(src, alias, band_mapping)
 
         elif is_zipfile(str(src)) or is_tarfile(str(src)):
@@ -70,10 +72,10 @@ class LandsatArchive(object):
     @classmethod
     def directory_open(cls, directory, alias, meta_template, band_mapping):
         metadata_file = cls.metadata_sniffer(os.listdir(str(directory)), meta_template)
-        metadata_obj = LandsatMetadata(str(directory / metadata_file))
+        metadata_obj = LandsatMetadata(directory / metadata_file)
         metadata_obj.parse()
 
-        sensor = metadata_obj.get('PRODUCT_METADATA', 'SENSOR_ID') + '_' + \
+        sensor = metadata_obj.get('PRODUCT_METADATA', 'SPACECRAFT_ID') + '_' + \
                  metadata_obj.get('PRODUCT_METADATA', 'SENSOR_ID')
         mapping = band_mapping[sensor]
 
@@ -84,7 +86,7 @@ class LandsatArchive(object):
         metadata_obj = LandsatMetadata(metadata)
         metadata_obj.parse()
 
-        sensor = metadata_obj.get('PRODUCT_METADATA', 'SENSOR_ID') + '_' + \
+        sensor = metadata_obj.get('PRODUCT_METADATA', 'SPACECRAFT_ID') + '_' + \
                  metadata_obj.get('PRODUCT_METADATA', 'SENSOR_ID')
         mapping = band_mapping[sensor]
 
@@ -94,7 +96,24 @@ class LandsatArchive(object):
 
     @classmethod
     def archive_open(cls, archive, extract_to, alias, meta_template, band_mapping):
-        pass
+        if extract_to is None:
+            ex = archive.parent / archive.name.split('.')[0]
+
+        else:
+            ex = Path(extract_to)
+
+        with __class__.archive_opener(str(archive)) as src:
+            metadata_file = cls.metadata_sniffer(src.namelist(), meta_template)
+            src.extractall(str(ex))
+
+        metadata_obj = LandsatMetadata(ex / metadata_file)
+        metadata_obj.parse()
+
+        sensor = metadata_obj.get('PRODUCT_METADATA', 'SPACECRAFT_ID') + '_' + \
+                 metadata_obj.get('PRODUCT_METADATA', 'SENSOR_ID')
+        mapping = band_mapping[sensor]
+
+        return cls(ex, metadata_obj, alias, mapping)
 
     def load(self):
         for k, v in self.metadata.iter_group('PRODUCT_METADATA'):
@@ -129,6 +148,10 @@ class LandsatArchive(object):
 
             else:
                 raise UnsupportedSourceError('Unsupported archive file %s' % archive)
+
+        # TODO meaningful error message
+        except:
+            pass
 
         finally:
             opener.close()
