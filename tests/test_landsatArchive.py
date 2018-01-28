@@ -1,5 +1,5 @@
 import unittest
-from src.landsat import LandsatArchive
+from landsat.utils import LandsatArchive
 
 
 class TestLandsatArchive(unittest.TestCase):

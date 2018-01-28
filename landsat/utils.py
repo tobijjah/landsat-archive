@@ -8,9 +8,15 @@ from contextlib import contextmanager
 
 
 BAND_MAP = {
-    'LANDSAT_4_TM': ''.split(),
-    'LANDSAT_7_ETM': ''.split(),
-    'LANDSAT_8_OLI_TIRS': ''.split(),
+    'LANDSAT_1_MSS': 'green red nir1 nir2'.split(),
+    'LANDSAT_2_MSS': 'green red nir1 nir2'.split(),
+    'LANDSAT_3_MSS': 'green red nir1 nir2'.split(),
+    'LANDSAT_4_MSS': 'green red nir1 nir2'.split(),
+    'LANDSAT_5_MSS': 'green red nir1 nir2'.split(),
+    'LANDSAT_4_TM': 'blue green red nir swir1 tirs swir2'.split(),
+    'LANDSAT_5_TM': 'blue green red nir swir1 tirs swir2'.split(),
+    'LANDSAT_7_ETM': 'blue green red nir swir1 tirs_low tirs_high swir2 panchromatic bq'.split(),
+    'LANDSAT_8_OLI_TIRS': 'costal blue gree red nir swir1 swir2 panchromatic cirrus tirs1 tirs2 bq'.split(),
 }
 
 
@@ -71,28 +77,26 @@ class LandsatArchive(object):
 
     @classmethod
     def directory_open(cls, directory, alias, meta_template, band_mapping):
-        metadata_file = cls.metadata_sniffer(os.listdir(str(directory)), meta_template)
-        metadata_obj = LandsatMetadata(directory / metadata_file)
-        metadata_obj.parse()
+        meta_file = cls.metadata_sniffer(os.listdir(str(directory)), meta_template)
+        meta = LandsatMetadata(directory / meta_file)
+        meta.parse()
 
-        sensor = metadata_obj.get('PRODUCT_METADATA', 'SPACECRAFT_ID') + '_' + \
-                 metadata_obj.get('PRODUCT_METADATA', 'SENSOR_ID')
+        sensor = meta.get('PRODUCT_METADATA', 'SPACECRAFT_ID') + '_' + meta.get('PRODUCT_METADATA', 'SENSOR_ID')
         mapping = band_mapping[sensor]
 
-        return cls(directory, metadata_obj, alias, mapping)
+        return cls(directory, meta, alias, mapping)
 
     @classmethod
     def metadata_open(cls, metadata, alias, band_mapping):
-        metadata_obj = LandsatMetadata(metadata)
-        metadata_obj.parse()
+        meta = LandsatMetadata(metadata)
+        meta.parse()
 
-        sensor = metadata_obj.get('PRODUCT_METADATA', 'SPACECRAFT_ID') + '_' + \
-                 metadata_obj.get('PRODUCT_METADATA', 'SENSOR_ID')
+        sensor = meta.get('PRODUCT_METADATA', 'SPACECRAFT_ID') + '_' + meta.get('PRODUCT_METADATA', 'SENSOR_ID')
         mapping = band_mapping[sensor]
 
         path = metadata.parent
 
-        return cls(path, metadata_obj, alias, mapping)
+        return cls(path, meta, alias, mapping)
 
     @classmethod
     def archive_open(cls, archive, extract_to, alias, meta_template, band_mapping):
@@ -103,19 +107,20 @@ class LandsatArchive(object):
             ex = Path(extract_to)
 
         with __class__.archive_opener(str(archive)) as src:
-            metadata_file = cls.metadata_sniffer(src.namelist(), meta_template)
+            meta_file = cls.metadata_sniffer(src.namelist(), meta_template)
             src.extractall(str(ex))
 
-        metadata_obj = LandsatMetadata(ex / metadata_file)
-        metadata_obj.parse()
+        meta = LandsatMetadata(ex / meta_file)
+        meta.parse()
 
-        sensor = metadata_obj.get('PRODUCT_METADATA', 'SPACECRAFT_ID') + '_' + \
-                 metadata_obj.get('PRODUCT_METADATA', 'SENSOR_ID')
+        sensor = meta.get('PRODUCT_METADATA', 'SPACECRAFT_ID') + '_' + meta.get('PRODUCT_METADATA', 'SENSOR_ID')
         mapping = band_mapping[sensor]
 
-        return cls(ex, metadata_obj, alias, mapping)
+        return cls(ex, meta, alias, mapping)
 
     def load(self):
+
+
         for k, v in self.metadata.iter_group('PRODUCT_METADATA'):
             pass
 

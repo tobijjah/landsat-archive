@@ -1,7 +1,7 @@
 from unittest import TestCase
-from src.landsat import LandsatMetadata
+from landsat.utils import LandsatMetadata
 from tests.stubs import L1, L4, L7, L8, OpenStub, FileMock
-from src.landsat import MetadataFileParsingError
+from landsat.utils import MetadataFileParsingError
 
 
 class TestLandsatMetadata(TestCase):
