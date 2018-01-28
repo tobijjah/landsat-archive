@@ -58,7 +58,7 @@ class LandsatArchive(object):
         if src.is_dir():
             return cls.directory_open(src, alias, meta_template, band_mapping)
 
-        elif src.suffix == 'txt':
+        elif src.suffix == 'txt' and src.is_file():
             return cls.metadata_open(src, alias, band_mapping)
 
         elif is_zipfile(str(src)) or is_tarfile(str(src)):
@@ -69,22 +69,28 @@ class LandsatArchive(object):
 
     @classmethod
     def directory_open(cls, directory, alias, meta_template, band_mapping):
-        # TODO init band mapping
         metadata_file = cls.metadata_sniffer(os.listdir(str(directory)), meta_template)
         metadata_obj = LandsatMetadata(str(directory / metadata_file))
         metadata_obj.parse()
 
-        return cls(directory, metadata_obj, alias, band_mapping)
+        sensor = metadata_obj.get('PRODUCT_METADATA', 'SENSOR_ID') + '_' + \
+                 metadata_obj.get('PRODUCT_METADATA', 'SENSOR_ID')
+        mapping = band_mapping[sensor]
+
+        return cls(directory, metadata_obj, alias, mapping)
 
     @classmethod
     def metadata_open(cls, metadata, alias, band_mapping):
-        # TODO init band mapping
         metadata_obj = LandsatMetadata(metadata)
         metadata_obj.parse()
 
+        sensor = metadata_obj.get('PRODUCT_METADATA', 'SENSOR_ID') + '_' + \
+                 metadata_obj.get('PRODUCT_METADATA', 'SENSOR_ID')
+        mapping = band_mapping[sensor]
+
         path = metadata.parent
 
-        return cls(path, metadata_obj, alias, band_mapping)
+        return cls(path, metadata_obj, alias, mapping)
 
     @classmethod
     def archive_open(cls, archive, extract_to, alias, meta_template, band_mapping):
@@ -129,15 +135,11 @@ class LandsatArchive(object):
 
 
 class LandsatMetadata(object):
+    # hook for testing
     _OPENER = open
 
     def __init__(self, path):
-        tmp = Path(path)
-
-        if tmp.is_file() and tmp.suffix == '.txt':
-            self.path = tmp
-        else:
-            raise MetadataFileError('Unsupported metadata file %s' % path)
+        self.path = Path(path)
 
     def _asdict(self):
         return OrderedDict([(k, v._asdict())
@@ -245,8 +247,8 @@ class LandsatMetadata(object):
                 obj = Metadata(*values)
                 metadata.append(obj)
 
-        # TODO convert into a meaningful exception
-        assert len(metadata) > 0
+        if len(metadata) == 0:
+            raise MetadataFileParsingError('It appears that this metadata file does not contain any metadata')
 
         return metadata
 
