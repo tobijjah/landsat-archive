@@ -1,5 +1,6 @@
 import re
 import os
+import rasterio
 from pathlib import Path
 from zipfile import ZipFile, is_zipfile
 from tarfile import TarFile, is_tarfile
@@ -8,15 +9,17 @@ from contextlib import contextmanager
 
 
 BAND_MAP = {
-    'LANDSAT_1_MSS': 'green red nir1 nir2'.split(),
-    'LANDSAT_2_MSS': 'green red nir1 nir2'.split(),
-    'LANDSAT_3_MSS': 'green red nir1 nir2'.split(),
-    'LANDSAT_4_MSS': 'green red nir1 nir2'.split(),
-    'LANDSAT_5_MSS': 'green red nir1 nir2'.split(),
-    'LANDSAT_4_TM': 'blue green red nir swir1 tirs swir2'.split(),
-    'LANDSAT_5_TM': 'blue green red nir swir1 tirs swir2'.split(),
-    'LANDSAT_7_ETM': 'blue green red nir swir1 tirs_low tirs_high swir2 panchromatic bq'.split(),
-    'LANDSAT_8_OLI_TIRS': 'costal blue gree red nir swir1 swir2 panchromatic cirrus tirs1 tirs2 bq'.split(),
+    'LANDSAT_1_MSS': dict(zip('green red nir1 nir2'.split(), '4 5 6 7'.split())),
+    'LANDSAT_2_MSS': dict(zip('green red nir1 nir2'.split(), '4 5 6 7'.split())),
+    'LANDSAT_3_MSS': dict(zip('green red nir1 nir2'.split(), '4 5 6 7'.split())),
+    'LANDSAT_4_MSS': dict(zip('green red nir1 nir2'.split(), '1 2 3 4'.split())),
+    'LANDSAT_5_MSS': dict(zip('green red nir1 nir2'.split(), '1 2 3 4'.split())),
+    'LANDSAT_4_TM': dict(zip('blue green red nir swir1 tirs swir2'.split(), '1 2 3 4 5 6 7'.split())),
+    'LANDSAT_5_TM': dict(zip('blue green red nir swir1 tirs swir2'.split(), '1 2 3 4 5 6 7'.split())),
+    'LANDSAT_7_ETM': dict(zip('blue green red nir swir1 tirs_low tirs_high swir2 panchromatic bq'.split(),
+                              '1 2 3 4 5 6_VCID_1 6_VCID_2 7 8 QUALITY'.split())),
+    'LANDSAT_8_OLI_TIRS': dict(zip('costal blue green red nir swir1 swir2 panchromatic cirrus tirs1 tirs2 bq'.split(),
+                                   '1 2 3 4 5 6 7 8 9 10 11 QUALITY')),
 }
 
 
@@ -36,6 +39,10 @@ class MetadataFileParsingError(LandsatError):
     """Exception for errors occurring during metadata file parsing"""
 
 
+class BandMapError(LandsatError):
+    """Exception for spacecraft + sensor not represented in BAND_MAP"""
+
+
 class TarFileWrapper(TarFile):
     """Delegate a namelist call to TarFile.getnames. Required for convenient duck typing
     between ZipFile and TarFile"""
@@ -47,59 +54,50 @@ class LandsatArchive(object):
     def __init__(self, source, metadata_obj, alias, band_mapping):
         self.src = source
         self.alias = alias
-        self.mapping = band_mapping
         self.metadata = metadata_obj
 
-    @classmethod
-    def open(cls, source, extract_to=None, alias=None, meta_template=r'.*_?MTL.txt', band_mapping=BAND_MAP):
-        """
+        self._bands = {}
+        self._mapping = band_mapping
 
-        :param source:
-        :param extract_to:
-        :param alias:
-        :param meta_template:
-        :param band_mapping:
-        :return:
-        """
+    @classmethod
+    def read(cls, source, extract_to=None, alias=None, meta_template=r'.*_?MTL.txt', band_mapping=BAND_MAP):
         src = Path(source)
 
         if src.is_dir():
-            return cls.directory_open(src, alias, meta_template, band_mapping)
+            return cls.directory_read(src, alias, meta_template, band_mapping)
 
         elif src.suffix == '.txt' and src.is_file():
-            return cls.metadata_open(src, alias, band_mapping)
+            return cls.metadata_read(src, alias, band_mapping)
 
         elif is_zipfile(str(src)) or is_tarfile(str(src)):
-            return cls.archive_open(src, extract_to, alias, meta_template, band_mapping)
+            return cls.archive_read(src, extract_to, alias, meta_template, band_mapping)
 
         else:
             raise UnsupportedSourceError('%s is not supported' % source)
 
     @classmethod
-    def directory_open(cls, directory, alias, meta_template, band_mapping):
+    def directory_read(cls, directory, alias, meta_template, band_mapping):
         meta_file = cls.metadata_sniffer(os.listdir(str(directory)), meta_template)
         meta = LandsatMetadata(directory / meta_file)
         meta.parse()
 
-        sensor = meta.get('PRODUCT_METADATA', 'SPACECRAFT_ID') + '_' + meta.get('PRODUCT_METADATA', 'SENSOR_ID')
-        mapping = band_mapping[sensor]
+        mapping = __class__.dispatch_mapping(meta, band_mapping)
 
         return cls(directory, meta, alias, mapping)
 
     @classmethod
-    def metadata_open(cls, metadata, alias, band_mapping):
+    def metadata_read(cls, metadata, alias, band_mapping):
         meta = LandsatMetadata(metadata)
         meta.parse()
 
-        sensor = meta.get('PRODUCT_METADATA', 'SPACECRAFT_ID') + '_' + meta.get('PRODUCT_METADATA', 'SENSOR_ID')
-        mapping = band_mapping[sensor]
+        mapping = __class__.dispatch_mapping(meta, band_mapping)
 
         path = metadata.parent
 
         return cls(path, meta, alias, mapping)
 
     @classmethod
-    def archive_open(cls, archive, extract_to, alias, meta_template, band_mapping):
+    def archive_read(cls, archive, extract_to, alias, meta_template, band_mapping):
         if extract_to is None:
             ex = archive.parent / archive.name.split('.')[0]
 
@@ -113,19 +111,40 @@ class LandsatArchive(object):
         meta = LandsatMetadata(ex / meta_file)
         meta.parse()
 
-        sensor = meta.get('PRODUCT_METADATA', 'SPACECRAFT_ID') + '_' + meta.get('PRODUCT_METADATA', 'SENSOR_ID')
-        mapping = band_mapping[sensor]
+        mapping = __class__.dispatch_mapping(meta, band_mapping)
 
         return cls(ex, meta, alias, mapping)
 
-    def load(self):
-
+    def _load(self):
+        regex = re.compile(r'FILE_NAME_BAND_(?P<key>(?:\d{1,2}|[A-Za-z]+).*)', re.I)
 
         for k, v in self.metadata.iter_group('PRODUCT_METADATA'):
-            pass
+            match = regex.match(k)
+
+            if match:
+                self._bands[match.group('key')] = v
+
+    def __getitem__(self, item):
+        pass
 
     def __repr__(self):
         return '{}({}, {}, {}, {})'.format(__class__.__name__, self.src, self.metadata, self.alias, self.mapping)
+
+    @staticmethod
+    def dispatch_mapping(meta, band_mapping):
+        # TODO fill error message
+        spacecraft = meta.get('PRODUCT_METADATA', 'SPACECRAFT_ID')
+        sensor = meta.get('PRODUCT_METADATA', 'SENSOR_ID')
+
+        if spacecraft is None or sensor is None:
+            raise MetadataFileError('Metadata does not contain a spacecraft or sensor attribute')
+
+        mapping = band_mapping.get('%s_%s' % (spacecraft, sensor))
+
+        if mapping is None:
+            raise BandMapError('No band mapping found for %s_%s' % (spacecraft, sensor))
+
+        return mapping
 
     @staticmethod
     def metadata_sniffer(names, template):
@@ -163,6 +182,7 @@ class LandsatArchive(object):
 
 
 class LandsatMetadata(object):
+    # TODO get value without group attribute create method for meta['group' or 'value']
     # hook for testing
     _OPENER = open
 
@@ -229,8 +249,9 @@ class LandsatMetadata(object):
 
     @staticmethod
     def lexer(scanner):
-        start_group = re.compile(r'GROUP\s=\s.+')
-        end_group = re.compile(r'END_GROUP\s=\s.+')
+        start_group = re.compile(r'GROUP\s=\s(?P<start_tag>.+)')
+        end_group = re.compile(r'END_GROUP\s=\s(?P<end_tag>.+)')
+        eof = 'END'
 
         groups = []
         for line in scanner:
@@ -239,15 +260,19 @@ class LandsatMetadata(object):
                 groups.append(current)
 
             elif bool(end_group.match(line)):
-                yield groups.pop()
+                s_tag = start_group.match(groups[-1][0]).group('start_tag')
+                e_tag = end_group.match(line).group('end_tag')
+
+                if s_tag == e_tag:
+                    yield groups.pop()
+                else:
+                    raise MetadataFileParsingError('Diverging start and end tag: %s != %s' % (s_tag, e_tag))
+
+            elif line == eof:
+                return
 
             else:
-                if groups:
-                    groups[-1].append(line)
-                else:
-                    groups.append([line])
-
-        yield from groups
+                groups[-1].append(line)
 
     @staticmethod
     def parser(lexer):
@@ -269,8 +294,7 @@ class LandsatMetadata(object):
                 keys.append(key)
                 values.append(value)
 
-            # TODO accept without GROUP key and create a generic group key
-            if len(keys) == len(values) and len(keys) > 1 and 'GROUP' in keys:
+            if len(keys) == len(values) and len(keys) > 1:
                 Metadata = namedtuple('Metadata', keys)
                 obj = Metadata(*values)
                 metadata.append(obj)
