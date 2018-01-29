@@ -1,12 +1,10 @@
 from unittest import TestCase
-from landsat.utils import LandsatMetadata
 from tests.stubs import L1, L4, L7, L8, OpenStub, FileMock
-from landsat.utils import MetadataFileParsingError
+from landsat.utils import LandsatMetadata, ParsingError, GroupError
 
 
 class TestLandsatMetadata(TestCase):
-    # TODO test _asdict, parse, scanner, init, read
-    # TODO del hard coded test attributes
+    # TODO test _asdict, parse, scanner, init
     def setUp(self):
         self.meta_file = L7
 
@@ -41,9 +39,8 @@ class TestLandsatMetadata(TestCase):
         self.assertTrue(len(result) == self.meta_file['product_len'])
 
     def test_iter_group_with_invalid_attribute(self):
-        result = list(self.meta.iter_group('foo'))
-
-        self.assertTrue(result == [])
+        with self.assertRaises(GroupError):
+            list(self.meta.iter_group('foo'))
 
     def test_lexer_with_valid_metadata(self):
         result = list(LandsatMetadata.lexer(self.meta_file['data']))
@@ -69,7 +66,7 @@ class TestLandsatMetadata(TestCase):
     def test_parser_fails_on_invalid_metadata(self):
         mock_gen = [['GROUP = TEST1'], ['FOO', 'BAR'], []]
 
-        with self.assertRaises(MetadataFileParsingError):
+        with self.assertRaises(ParsingError):
             LandsatMetadata.parser(mock_gen)
 
     def test_cast_to_best(self):

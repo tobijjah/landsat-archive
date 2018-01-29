@@ -23,27 +23,42 @@ BAND_MAP = {
 }
 
 
+# Base exception class
 class LandsatError(Exception):
     """Base exception"""
 
 
-class UnsupportedSourceError(LandsatError):
-    """Exception for unsupported sources"""
+# LandsatArchive exception
+class LandsatArchiveError(LandsatError):
+    """Base class for LandsatArchive exceptions"""
 
 
-class MetadataFileError(LandsatError):
-    """Exception for Landsat metadata files"""
-
-
-class MetadataFileParsingError(LandsatError):
-    """Exception for errors occurring during metadata file parsing"""
-
-
-class BandMapError(LandsatError):
+class BandMapError(LandsatArchiveError):
     """Exception for spacecraft + sensor not represented in BAND_MAP"""
 
 
-class TarFileWrapper(TarFile):
+class UnsupportedSourceError(LandsatArchiveError):
+    """Exception for unsupported sources"""
+
+
+# LandsatMetadata exceptions
+class LandsatMetadataError(LandsatError):
+    """Base class for LandsatMetadata exceptions"""
+
+
+class MetadataFileError(LandsatMetadataError):
+    """Exception for Landsat metadata files"""
+
+
+class ParsingError(LandsatMetadataError):
+    """Exception for errors occurring during metadata file parsing"""
+
+
+class GroupError(LandsatMetadataError):
+    """Exception if for a requested but missing group"""
+
+
+class _TarFileWrapper(TarFile):
     """Delegate a namelist call to TarFile.getnames. Required for convenient duck typing
     between ZipFile and TarFile"""
     def namelist(self):
@@ -73,7 +88,7 @@ class LandsatArchive(object):
             return cls.archive_read(src, extract_to, alias, meta_template, band_mapping)
 
         else:
-            raise UnsupportedSourceError('%s is not supported' % source)
+            raise UnsupportedSourceError('%s is not supported.' % source)
 
     @classmethod
     def directory_read(cls, directory, alias, meta_template, band_mapping):
@@ -163,7 +178,7 @@ class LandsatArchive(object):
     def archive_opener(archive, mode='r'):
         try:
             if is_tarfile(archive):
-                opener = TarFileWrapper.open(archive, mode=mode)
+                opener = _TarFileWrapper.open(archive, mode=mode)
                 yield opener
 
             elif is_zipfile(archive):
@@ -204,6 +219,9 @@ class LandsatMetadata(object):
         for item in metadata:
             self.__setattr__(item.GROUP, item)
 
+    def __getitem__(self, item):
+        pass
+
     def get(self, group, value=None, default=None):
         try:
             attr = self.__getattribute__(group.upper())
@@ -221,7 +239,7 @@ class LandsatMetadata(object):
         attr = self.get(group)
 
         if attr is None:
-            return
+            raise GroupError('Not possible to iterate over non existing group: %s' % group)
 
         yield from attr._asdict().items()
 
@@ -266,7 +284,7 @@ class LandsatMetadata(object):
                 if s_tag == e_tag:
                     yield groups.pop()
                 else:
-                    raise MetadataFileParsingError('Diverging start and end tag: %s != %s' % (s_tag, e_tag))
+                    raise ParsingError('Diverging start and end tag: %s != %s' % (s_tag, e_tag))
 
             elif line == eof:
                 return
@@ -300,7 +318,7 @@ class LandsatMetadata(object):
                 metadata.append(obj)
 
         if len(metadata) == 0:
-            raise MetadataFileParsingError('It appears that this metadata file does not contain any metadata')
+            raise ParsingError('Empty metadata file')
 
         return metadata
 
