@@ -147,7 +147,6 @@ class LandsatArchive(object):
 
     @staticmethod
     def dispatch_mapping(meta, band_mapping):
-        # TODO fill error message
         spacecraft = meta.get('PRODUCT_METADATA', 'SPACECRAFT_ID')
         sensor = meta.get('PRODUCT_METADATA', 'SENSOR_ID')
 
@@ -197,7 +196,6 @@ class LandsatArchive(object):
 
 
 class LandsatMetadata(object):
-    # TODO get value without group attribute create method for meta['group' or 'value']
     # hook for testing
     _OPENER = open
 
@@ -220,6 +218,7 @@ class LandsatMetadata(object):
             self.__setattr__(item.GROUP, item)
 
     def __getitem__(self, item):
+        # TODO implement
         pass
 
     def get(self, group, value=None, default=None):
