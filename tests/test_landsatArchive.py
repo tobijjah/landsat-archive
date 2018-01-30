@@ -36,9 +36,7 @@ class TestLandsatArchive(unittest.TestCase):
         pass
 
     def test_load(self):
-        obj = LandsatArchive('test', self.meta, '', '')
-        obj._load()
-        print(obj._bands)
+        pass
 
     def test_dispatch_mapping(self):
         expected = BAND_MAP[self.meta_file['id']]
