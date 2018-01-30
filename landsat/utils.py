@@ -140,7 +140,18 @@ class LandsatArchive(object):
                 self._bands[match.group('key')] = v
 
     def __getitem__(self, item):
-        pass
+        # TODO not final
+        idx = str(item)
+
+        if idx in self._bands:
+            return rasterio.open(str(self.src / self._bands[idx]), 'r')
+
+        elif idx in self._mapping:
+            idx = self._mapping[idx]
+            return rasterio.open(str(self.src / self._bands[idx]), 'r')
+
+        else:
+            raise KeyError('%s not found' % item)
 
     def __repr__(self):
         return '{}({}, {}, {}, {})'.format(__class__.__name__, self.src, self.metadata, self.alias, self.mapping)
@@ -216,10 +227,6 @@ class LandsatMetadata(object):
 
         for item in metadata:
             self.__setattr__(item.GROUP, item)
-
-    def __getitem__(self, item):
-        # TODO implement
-        pass
 
     def get(self, group, value=None, default=None):
         try:
