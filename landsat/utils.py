@@ -179,6 +179,7 @@ class LandsatArchive(object):
         return msg
 
     def __repr__(self):
+        # TODO refactor returns a large confusing string
         return '{}({}, {}, {}, {})'.format(__class__.__name__, self.src, self.metadata, self.alias, self._mapping)
 
     @staticmethod
