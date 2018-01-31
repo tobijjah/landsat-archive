@@ -98,7 +98,10 @@ class LandsatArchive(object):
 
         mapping = __class__.dispatch_mapping(meta, band_mapping)
 
-        return cls(directory, meta, alias, mapping)
+        obj = cls(directory, meta, alias, mapping)
+        obj._load()
+
+        return obj
 
     @classmethod
     def metadata_read(cls, metadata, alias, band_mapping):
@@ -109,7 +112,10 @@ class LandsatArchive(object):
 
         path = metadata.parent
 
-        return cls(path, meta, alias, mapping)
+        obj = cls(path, meta, alias, mapping)
+        obj._load()
+
+        return obj
 
     @classmethod
     def archive_read(cls, archive, extract_to, alias, meta_template, band_mapping):
@@ -128,7 +134,10 @@ class LandsatArchive(object):
 
         mapping = __class__.dispatch_mapping(meta, band_mapping)
 
-        return cls(ex, meta, alias, mapping)
+        obj = cls(ex, meta, alias, mapping)
+        obj._load()
+
+        return obj
 
     def _load(self):
         regex = re.compile(r'FILE_NAME_BAND_(?P<key>(?:\d{1,2}|[A-Za-z]+).*)', re.I)
@@ -153,8 +162,24 @@ class LandsatArchive(object):
         else:
             raise KeyError('%s not found' % item)
 
+    def __str__(self):
+        # TODO not final
+        msg = """
+        Spacecraft: {}
+        Sensor: {}
+        Date acquired: {}
+        Cloud cover: {}
+        Quality: {}
+        """.format(self.metadata.get('product_metadata', 'spacecraft_id'),
+                   self.metadata.get('product_metadata', 'sensor_id'),
+                   self.metadata.get('product_metadata', 'date_acquired'),
+                   self.metadata.get('image_attributes', 'cloud_cover'),
+                   self.metadata.get('image_attributes', 'image_quality'))
+
+        return msg
+
     def __repr__(self):
-        return '{}({}, {}, {}, {})'.format(__class__.__name__, self.src, self.metadata, self.alias, self.mapping)
+        return '{}({}, {}, {}, {})'.format(__class__.__name__, self.src, self.metadata, self.alias, self._mapping)
 
     @staticmethod
     def dispatch_mapping(meta, band_mapping):
