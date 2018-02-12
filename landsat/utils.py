@@ -142,7 +142,7 @@ class LandsatArchive(object):
     def _load(self):
         regex = re.compile(r'FILE_NAME_BAND_(?P<key>(?:\d{1,2}|[A-Za-z]+).*)', re.I)
 
-        for k, v in self.metadata.iter_group('PRODUCT_METADATA'):
+        for k, v in self.metadata.iter_group('product_metadata'):
             match = regex.match(k)
 
             if match:
@@ -184,18 +184,15 @@ class LandsatArchive(object):
 
     @staticmethod
     def dispatch_mapping(meta, band_mapping):
-        spacecraft = meta.get('PRODUCT_METADATA', 'SPACECRAFT_ID')
-        sensor = meta.get('PRODUCT_METADATA', 'SENSOR_ID')
-
-        if spacecraft is None or sensor is None:
-            raise MetadataFileError('Metadata does not contain a spacecraft or sensor attribute')
+        spacecraft = meta.get('product_metadata', 'spacecraft_id')
+        sensor = meta.get('product_metadata', 'sensor_id')
 
         mapping = band_mapping.get('%s_%s' % (spacecraft, sensor))
 
-        if mapping is None:
+        if mapping:
+            return mapping
+        else:
             raise BandMapError('No band mapping found for %s_%s' % (spacecraft, sensor))
-
-        return mapping
 
     @staticmethod
     def metadata_sniffer(names, template):
